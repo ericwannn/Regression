@@ -34,7 +34,7 @@ class Transaction(object):
         lag_return = self.get_lag_return(time_frame_sizes=time_frame_sizes_x)
 
         # In this case, the valid range is [300, 4201)
-        valid_from = self.minute_to_n_rows(max(time_frame_sizes_x))  # 300 in this case
+        valid_from = self.minute_to_n_rows(max(time_frame_sizes_x)) + 1  # 300 in this case
         valid_till = - self.minute_to_n_rows(max(time_frame_sizes_y))  # -600, which is 4201 in this case.
 
         result = pd.concat([rtn, avg_delta, volume, lag_return], axis=1)
@@ -64,7 +64,7 @@ class Transaction(object):
         return result
 
     def _get_lag_return_by_time_frame_size(self, time_frame_size):
-        return self.price.shift(self.minute_to_n_rows(time_frame_size)) / self.price - 1
+        return self.price / self.price.shift(self.minute_to_n_rows(time_frame_size)) - 1
 
     ###################################################################
     # Find average of delta of bid/ask size and respective proportion #
@@ -150,10 +150,6 @@ class Transaction(object):
     # Helper functions #
     ####################
 
-    @staticmethod
-    def minute_to_n_rows(minute):
-        return int(60 * minute / 3)
-
     def _find_average(self, data_frame, time_frame_sizes, axis=1):
         """ Consume a data frame, calculate the average according to the time frame size
         Note: current snapshot included.
@@ -174,6 +170,10 @@ class Transaction(object):
             result.append(avg_df / n_rows)
 
         return pd.concat(result, axis=1)
+
+    @staticmethod
+    def minute_to_n_rows(minute):
+        return int(60 * minute / 3)
 
     @staticmethod
     def _truncate_inf(data_frame, how='01'):

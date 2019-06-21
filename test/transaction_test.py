@@ -1,3 +1,4 @@
+import numpy as np
 from src.transaction import Transaction
 from src.data_reader import DataReader
 
@@ -38,12 +39,10 @@ def get_lag_return_test(trx):
 
 if __name__ == '__main__':
     dr = DataReader(data_path='../data/rawdata')
-    df = dr.get_stock_info(stock_code='000006', date='20180802')
+    df = dr.get_stock_info(stock_code='000006', date='20180820')
     tr = Transaction(df)
     data = tr.parse()
-    print(data.describe())
+    print(np.isnan(data).any())
     print(data.shape)
-    print(data.head(3))
-    print(data.tail(3))
 
 
