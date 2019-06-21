@@ -11,14 +11,16 @@ from src.utils import get_leaf_file_names
 
 @timeit
 def main(generate_data=False, mode='Train'):
+    assert mode in ['Train', 'Test']
+
     # Global config
     _RAW_DATA_PATH = './data/rawdata'
     _DATA_PATH = './data/date_data/'
     _OUTPUT_DIR = './data/output/'
 
     # Training configuration
-    _TEST_SET_SIZE = .4
-    _SLIDING_WINDOW_SIZE = 5
+    _TEST_SET_SIZE = 1
+    _SLIDING_WINDOW_SIZE = 10
     _CHUNK_SIZE = 3901 * 2
     _MODEL_RIDGE = Ridge
     _MODEL_KKR = KernelRidge
@@ -62,11 +64,10 @@ def main(generate_data=False, mode='Train'):
                                time_frame_sizes_x=_TIME_FRAME_SIZE_X)
         date_dataset.parse_data_by_date(num_workers=8, output_directory=_DATA_PATH)
 
+    date_files = get_leaf_file_names(_DATA_PATH)
     if mode == 'Train':
         # Prepare dataset
-        date_files = get_leaf_file_names(_DATA_PATH)
-        data_train = date_files[:-int(len(date_files) * _TEST_SET_SIZE)]
-        data_test = date_files[-int(len(date_files) * _TEST_SET_SIZE) - _SLIDING_WINDOW_SIZE + 1:]
+        data_train = date_files[:- _TEST_SET_SIZE]
 
         # Train model with different parameters
         model = Model(
@@ -75,6 +76,9 @@ def main(generate_data=False, mode='Train'):
             window_size=_SLIDING_WINDOW_SIZE
         )
         corrcoef, y_preds, y_truth = model.run()
+    else:
+        data_test = date_files[- _TEST_SET_SIZE:]
+
 
 
 if __name__ == '__main__':

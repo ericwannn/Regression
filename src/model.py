@@ -6,11 +6,27 @@ import pandas as pd
 
 
 class Model(object):
-
+    """
+    Given paths of files and necessary configuration.
+    1. Create dataset with a sliding windows of size N, which contains several days (or numbers of records) of features.
+    2. Use the first N - 1 days of data as training set. The N-th (last) day of data as validation set.
+    3. Slide the window forward by one day. Go to step 1 and repeat till the window reaches the end of all training data
+    """
     def __init__(self, X, y, model, params,
                  data_files, columns_to_normalize,
                  days_as_window=False,
                  window_size=3, chunk_size=3901):
+        """
+        :param X: features
+        :param y: labels
+        :param model: regression model
+        :param params: model config
+        :param data_files:  paths to the files
+        :param columns_to_normalize: select certain columns to normalize
+        :param days_as_window: when set to True, window slides on date dataset (each time slide 1 day at least)
+        :param window_size: specify number of date data or records in one window
+        :param chunk_size: when days_as_window is False, window slides several lines of record instead.
+        """
         self.X = X
         self.y = y
         self._model = model
