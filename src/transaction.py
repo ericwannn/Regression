@@ -31,49 +31,40 @@ class Transaction(object):
         rtn = self.get_return(time_frame_sizes=time_frame_sizes_y)
         avg_delta = self.get_average_delta_bid_ask_size(time_frame_sizes=time_frame_sizes_x)
         volume = self.get_volume_init_by_buy_and_sell(time_frame_sizes=time_frame_sizes_x)
+        lag_return = self.get_lag_return(time_frame_sizes=time_frame_sizes_x)
 
-        valid_till = - self.minute_to_n_rows(max(time_frame_sizes_x))
-        valid_from = self.minute_to_n_rows(max(time_frame_sizes_y))
+        # In this case, the valid range is [300, 4201)
+        valid_from = self.minute_to_n_rows(max(time_frame_sizes_x))  # 300 in this case
+        valid_till = - self.minute_to_n_rows(max(time_frame_sizes_y))  # -600, which is 4201 in this case.
 
-        result = pd.concat([rtn, avg_delta, volume], axis=1)
+        result = pd.concat([rtn, avg_delta, volume, lag_return], axis=1)
         if truncate_inf:
             self._truncate_inf(result)
         return result.iloc[valid_from: valid_till]
-
-    @staticmethod
-    def _truncate_inf(data_frame, how='01'):
-        """
-        Truncate +/- np.inf values.
-        :param data_frame:
-        :param how: '01' turn inf and -inf into 1 and 0 resp.
-                Otherwise, replace inf with the second greatest. -inf vice versa.
-        :return: No return. Replace is inplace
-        """
-        if how == '01':
-            data_frame.replace(-np.inf, 0, inplace=True)
-            data_frame.replace(np.inf, 1, inplace=True)
-        else:
-            columns_with_inf = set(list(
-                data_frame.columns[np.any(data_frame == -np.inf, axis=0)]
-            ) + list(data_frame.columns[np.any(data_frame == np.inf, axis=0)]))
-            for col in columns_with_inf:
-                tmp = data_frame[col].replace([-np.inf, np.inf], data_frame[col].median())
-                col_min, col_max = min(tmp), max(tmp)
-                data_frame[col].replace(-np.inf, col_min, inplace=True)
-                data_frame[col].replace(np.inf, col_max, inplace=True)
 
     ############
     # Find `y` #
     ############
 
     def get_return(self, time_frame_sizes=(1, 5, 15, 30)):
-        result = [self._get_return_by_time_frame_size(size) for size in time_frame_sizes]
-        result = pd.concat(result, axis=1).loc[:min(map(len, result))]
+        result = pd.concat([self._get_return_by_time_frame_size(size) for size in time_frame_sizes], axis=1)
         result.columns = ['return_{}_min'.format(size) for size in time_frame_sizes]
         return result
 
     def _get_return_by_time_frame_size(self, time_frame_size):
         return self.price.shift(- self.minute_to_n_rows(time_frame_size)) / self.price - 1
+
+    ###################
+    # Find lag return #
+    ###################
+
+    def get_lag_return(self, time_frame_sizes=(1, 5, 15)):
+        result = pd.concat([self._get_lag_return_by_time_frame_size(size) for size in time_frame_sizes], axis=1)
+        result.columns = ['lag_return_{}'.format(size) for size in time_frame_sizes]
+        return result
+
+    def _get_lag_return_by_time_frame_size(self, time_frame_size):
+        return self.price.shift(self.minute_to_n_rows(time_frame_size)) / self.price - 1
 
     ###################################################################
     # Find average of delta of bid/ask size and respective proportion #
@@ -184,6 +175,24 @@ class Transaction(object):
 
         return pd.concat(result, axis=1)
 
-
-
-
+    @staticmethod
+    def _truncate_inf(data_frame, how='01'):
+        """
+        Truncate +/- np.inf values.
+        :param data_frame:
+        :param how: '01' turn inf and -inf into 1 and 0 resp.
+                Otherwise, replace inf with the second greatest. -inf vice versa.
+        :return: No return. Replace is inplace
+        """
+        if how == '01':
+            data_frame.replace(-np.inf, 0, inplace=True)
+            data_frame.replace(np.inf, 1, inplace=True)
+        else:
+            columns_with_inf = set(list(
+                data_frame.columns[np.any(data_frame == -np.inf, axis=0)]
+            ) + list(data_frame.columns[np.any(data_frame == np.inf, axis=0)]))
+            for col in columns_with_inf:
+                tmp = data_frame[col].replace([-np.inf, np.inf], data_frame[col].median())
+                col_min, col_max = min(tmp), max(tmp)
+                data_frame[col].replace(-np.inf, col_min, inplace=True)
+                data_frame[col].replace(np.inf, col_max, inplace=True)

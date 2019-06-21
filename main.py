@@ -10,7 +10,7 @@ from src.utils import get_leaf_file_names
 
 
 @timeit
-def main(generate_data=False, save_result=True):
+def main(generate_data=False, mode='Train'):
     # Global config
     _RAW_DATA_PATH = './data/rawdata'
     _DATA_PATH = './data/date_data/'
@@ -43,6 +43,10 @@ def main(generate_data=False, save_result=True):
         'buy_volume_1', 'buy_volume_5', 'buy_volume_15', 'sell_volume_1', 'sell_volume_5',
         'sell_volume_15', 'proportion_volume_1', 'proportion_volume_5', 'proportion_volume_15'
     ]
+
+    _X_3 = [
+        'lag_return_1', 'lag_return_10', 'lag_return_15'
+    ]
     _Y_1, _Y_2, _Y_3, _Y_4 = ['return_1_min', 'return_5_min', 'return_15_min', 'return_30_min']
 
     _COLUMNS_TO_NORMALIZE = [
@@ -58,25 +62,20 @@ def main(generate_data=False, save_result=True):
                                time_frame_sizes_x=_TIME_FRAME_SIZE_X)
         date_dataset.parse_data_by_date(num_workers=8, output_directory=_DATA_PATH)
 
-    # Prepare dataset
-    date_files = get_leaf_file_names(_DATA_PATH)
-    data_train = date_files[:-int(len(date_files) * _TEST_SET_SIZE)]
-    data_test = date_files[-int(len(date_files) * _TEST_SET_SIZE) - _SLIDING_WINDOW_SIZE + 1:]
+    if mode == 'Train':
+        # Prepare dataset
+        date_files = get_leaf_file_names(_DATA_PATH)
+        data_train = date_files[:-int(len(date_files) * _TEST_SET_SIZE)]
+        data_test = date_files[-int(len(date_files) * _TEST_SET_SIZE) - _SLIDING_WINDOW_SIZE + 1:]
 
-    # Train model with different parameters
-    model = Model(
-        X=_X_2, y=_Y_1, model=_MODEL_RIDGE, params=_PARAMS_RIDGE,
-        data_files=data_train, columns_to_normalize=_COLUMNS_TO_NORMALIZE,
-        window_size=_SLIDING_WINDOW_SIZE
-    )
-    corrcoef, y_preds, y_truth = model.run()
-
-    # if save_result:
-    #     with open(_OUTPUT_DIR+'y_preds.pkl', 'wb') as file:
-    #         pickle.dump(y_preds, file)
-    #     with open(_OUTPUT_DIR+'y_truth.pkl', 'wb') as file:
-    #         pickle.dump(y_truth, file)
+        # Train model with different parameters
+        model = Model(
+            X=_X_2, y=_Y_1, model=_MODEL_RIDGE, params=_PARAMS_RIDGE,
+            data_files=data_train, columns_to_normalize=_COLUMNS_TO_NORMALIZE,
+            window_size=_SLIDING_WINDOW_SIZE
+        )
+        corrcoef, y_preds, y_truth = model.run()
 
 
 if __name__ == '__main__':
-    main(generate_data=False, save_result=True)
+    main(generate_data=True, mode='Test')
