@@ -51,7 +51,7 @@ class Model(object):
                 self.train(train)
                 print('Validating on {}'.format(files[-1].split('/')[-1]))
                 self.update_val_result(train, val)
-                print('------------------------------------------')
+                print('------------------------------------------\n')
             return self.corrcoef, np.concatenate(self.y_preds), pd.concat(self.y_truth).to_numpy()
         else:
             g_dataset = self.column_dataset_generator()
