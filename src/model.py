@@ -1,6 +1,8 @@
 from __future__ import print_function
 from __future__ import division
 
+import pickle
+import pprint
 import numpy as np
 import pandas as pd
 
@@ -12,7 +14,7 @@ class Model(object):
     2. Use the first N - 1 days of data as training set. The N-th (last) day of data as validation set.
     3. Slide the window forward by one day. Go to step 1 and repeat till the window reaches the end of all training data
     """
-    def __init__(self, X, y, model, params,
+    def __init__(self, X, y, model, params, output_model_name,
                  data_files, columns_to_normalize,
                  centre_by='median', days_as_window=False,
                  window_size=3, chunk_size=3901):
@@ -21,7 +23,7 @@ class Model(object):
         :param y: labels
         :param model: regression model
         :param params: model config
-        :param data_files:  paths to the files
+        :param data_files:  paths to the data files
         :param columns_to_normalize: select certain columns to normalize
         :param days_as_window: when set to True, window slides on date dataset (each time slide 1 day at least)
         :param window_size: specify number of date data or records in one window
@@ -30,6 +32,7 @@ class Model(object):
         self.X = X
         self.y = y
         self.model = model(**params)
+        self.output_model_name = output_model_name
         self.data_files = data_files
         self.centre_by = centre_by
         self.columns_to_normalize = list(set(columns_to_normalize).intersection(self.X))
@@ -37,22 +40,21 @@ class Model(object):
         self.days_as_window = days_as_window
         self.window_size = window_size
         self.chunk_size = chunk_size
-        self.y_preds = []
-        self.y_truth = []
         self.corrcoef = []
+        self.stats = []
 
     def run(self):
         if self.days_as_window:
             g_dataset = self.date_dataset_generator()
             for (idx, files, train, val) in g_dataset:
-                print('------------------------------------------')
+                print('------------------------------------------------------------')
                 print('Training phrase {}...'.format(idx + 1))
                 print('Training on {}'.format([x.split('/')[-1] for x in files[:-1]]))
-                self.train(train)
+                self.train(idx, train)
                 print('Validating on {}'.format(files[-1].split('/')[-1]))
                 self.update_val_result(train, val)
-                print('------------------------------------------\n')
-            return self.corrcoef, np.concatenate(self.y_preds), pd.concat(self.y_truth).to_numpy()
+                print('------------------------------------------------------------\n')
+            return self.stats, self.corrcoef
         else:
             g_dataset = self.column_dataset_generator()
             for idx, train, val in g_dataset:
@@ -60,18 +62,33 @@ class Model(object):
                 self.train(train)
                 self.update_val_result(train, val)
             print(sum(self.corrcoef) / len(self.corrcoef))
-            return self.corrcoef, np.concatenate(self.y_preds), pd.concat(self.y_truth).to_numpy()
+            return self.corrcoef
 
-    def train(self, data):
+    def train(self, idx, data):
         X_train = data[self.X]
         y_train = data[self.y]
         self.model.fit(X_train, y_train)
+        with open('{}_{}.pickle'.format(self.output_model_name, idx), 'wb') as f:
+            pickle.dump(self.model, f)
 
-    def test(self, data):
-        test_data = self.pre_process(self._file_reader(data)[0])
-        y_hat = self.model.predict(test_data[self.X])
-        y = test_data[self.y]
-        return y_hat, y, np.corrcoef(y_hat, y)
+    def test(self, test_set, read_model=None):
+        assert isinstance(test_set, list) and len(test_set) > 0
+        model = read_model if read_model else self.model
+        result = []
+        for idx, data in enumerate(test_set):
+            test_data = self.pre_process(self._file_reader(data)[0])
+            y_hat = model.predict(test_data[self.X])
+            y = test_data[self.y]
+            stats = self.stat_analysis(y, y_hat, test_data, model.coef_)
+            corr = np.corrcoef(y_hat, y)
+            print('Corrcoef: {}'.format(corr))
+            result.append({
+                'y_hat': y_hat,
+                'y': y,
+                'corr': np.corrcoef(y_hat, y),
+                'stats': stats
+            })
+        return result
 
     def update_val_result(self, data_train, data_val):
         preds_on_train = self.model.predict(data_train[self.X])
@@ -82,24 +99,26 @@ class Model(object):
         corr = np.corrcoef(y_preds, y_truth)[0][1]
         self.corrcoef.append(corr)
         print('Corrcoef on validation set:', corr)
-        self.stat_analysis(y_truth, y_preds, data_val)
-        self.y_preds.append(y_preds)
-        self.y_truth.append(y_truth)
+        stats = self.stat_analysis(y_truth, y_preds, data_val, self.model.coef_)
+        self.stats.append(stats)
 
-    def stat_analysis(self, y, y_hat, data):
-        coefs = dict(zip(self.X, self.model.coef_))
+    def stat_analysis(self, y, y_hat, data, coefs):
+        coefs = dict(zip(self.X, coefs))
         sse = np.square(y - y_hat).sum()
         s_2 = sse / (y.shape[0] - 2)
         ss_yy = np.square(y - y.mean()).sum()
         r_2 = 1 - sse / ss_yy
-        t_value = {
-            x: coefs[x] / np.sqrt(s_2 / np.square(data[x] - data[x].mean()).sum())
+        t_value = [
+            coefs[x] / np.sqrt(s_2 / np.square(data[x] - data[x].mean()).sum())
             for x in self.X
+        ]
+        print(t_value)
+        stats = {
+           'R_square': r_2,
+           'stats': pd.DataFrame(zip(self.X, self.model.coef_, t_value), columns=['Feature', 'Coef', 'T-value'])
         }
-        print('R square: {}'.format(r_2))
-        print('Feature \t \t Coefficient \t \t t_value')
-        for x in coefs:
-            print('{} \t \t {} \t \t {}'.format(x, np.round(coefs[x], 4), np.round(t_value[x], 4)))
+        pprint.pprint(stats, indent=4)
+        return stats
 
     def column_dataset_generator(self):
         window_length = self.window_size * self.chunk_size
